@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"  # Use wide layout to accommodate columns
 )
 
-# Custom CSS for styling and to fix the reasoning column
+# Custom CSS for styling
 st.markdown("""
 <style>
     /* Import fonts */
@@ -74,64 +74,53 @@ st.markdown("""
         }
     }
     
-    /* Fix some Streamlit UI elements */
+    /* Hide the default Streamlit padding */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
+        max-width: 100% !important;
     }
     
-    /* Make the main layout a two-column grid */
-    .main-grid {
-        display: grid;
-        grid-template-columns: 7fr 3fr;
-        gap: 20px;
-        height: calc(100vh - 100px);
+    /* Custom layout styles */
+    .custom-layout {
+        display: flex;
+        width: 100%;
     }
     
-    /* Chat column */
     .chat-column {
-        overflow-y: auto;
+        flex: 7;
         padding-right: 20px;
+        overflow-y: auto;
+        height: calc(100vh - 120px);
     }
     
-    /* Fixed reasoning column */
-    .reasoning-column {
-        position: sticky;
-        top: 0;
-        height: fit-content;
-        max-height: calc(100vh - 100px);
-        overflow-y: auto;
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header {
+        visibility: hidden;
+    }
+    
+    /* Make the iframe container stick on the right */
+    .iframe-container {
+        position: fixed;
+        top: 150px;
+        right: 20px;
+        width: 27%;  /* Match this to the 3fr from the grid layout */
+        z-index: 1000;
+        background: white;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        border-radius: 5px;
+        max-height: 70vh;
+        overflow: auto;
+    }
+    
+    /* Style the iframe itself */
+    .reasoning-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
     }
 </style>
 """, unsafe_allow_html=True)
-
-# Add custom components.html to fix reasoning column
-components.html("""
-<script>
-// Function to keep reasoning in view
-function setupReasoningColumn() {
-    const observer = new MutationObserver(function(mutations) {
-        const reasoningCol = document.querySelector('.reasoning-column');
-        if (reasoningCol) {
-            reasoningCol.style.position = 'fixed';
-            reasoningCol.style.right = '20px';
-            reasoningCol.style.top = '100px';
-            reasoningCol.style.width = '25%';
-            reasoningCol.style.maxHeight = '80vh';
-            reasoningCol.style.overflowY = 'auto';
-            observer.disconnect();
-        }
-    });
-    
-    observer.observe(document.body, { childList: true, subtree: true });
-}
-
-// Run on page load
-document.addEventListener('DOMContentLoaded', setupReasoningColumn);
-// Also run now in case page is already loaded
-setupReasoningColumn();
-</script>
-""", height=0)
 
 # Show title
 st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;'>💬 MEDIA EFFECTS TEST</h1>", unsafe_allow_html=True)
@@ -161,25 +150,13 @@ if "chat_history" not in st.session_state:
 if "reasoning_content" not in st.session_state:
     st.session_state.reasoning_content = ""
 
-# Create a custom two-column layout using HTML/CSS
-st.markdown("""
-<div class="main-grid">
-    <div class="chat-column" id="chat-column">
-        <h3>Chat</h3>
-        <div id="messages-container"></div>
-    </div>
-    <div class="reasoning-column" id="reasoning-column">
-        <div id="reasoning-container"></div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# Create a container for chat that takes 70% of the width
+chat_col1, chat_col2 = st.columns([7, 3])
 
-# Create containers for our content
-chat_container = st.container()
-reasoning_container = st.container()
-
-# Display chat history in the left column
-with chat_container:
+with chat_col1:
+    st.subheader("Chat")
+    
+    # Display the existing chat messages
     for message in st.session_state.chat_history:
         if message["role"] == "user":
             with st.chat_message("user"):
@@ -187,15 +164,59 @@ with chat_container:
         else:
             with st.chat_message("assistant"):
                 st.markdown(message["content"])
+    
+    # Add chat input at the bottom
+    prompt = st.chat_input("What would you like to know today?")
 
-# Add chat input
-prompt = st.chat_input("What would you like to know today?")
+# Create an iframe to display reasoning in a fixed position
+if "iframe_height" not in st.session_state:
+    st.session_state.iframe_height = 300
 
-# Function to update the reasoning container
-def update_reasoning(content):
+# Function to update the reasoning content
+def update_reasoning_content(content):
     st.session_state.reasoning_content = content
-    with reasoning_container:
-        st.markdown(f'<div class="reasoning-cue">{content}</div>', unsafe_allow_html=True)
+    
+    # Calculate a reasonable height based on content length
+    content_length = len(content)
+    if content_length < 100:
+        height = 150
+    elif content_length < 300:
+        height = 250
+    else:
+        height = 350
+    
+    st.session_state.iframe_height = height
+    
+    # Create HTML for the reasoning content
+    reasoning_html = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: 'Inter', sans-serif;
+                margin: 0;
+                padding: 10px;
+            }}
+            .reasoning-cue {{
+                background-color: #f7f7f7;
+                border-left: 3px solid #3f39e3;
+                padding: 10px 15px;
+                margin: 5px 0;
+                font-style: italic;
+                color: #555;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="reasoning-cue">{content}</div>
+    </body>
+    </html>
+    """
+    
+    return reasoning_html
+
+# Create a fixed iframe for reasoning content
+iframe_container = st.empty()
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
@@ -203,19 +224,63 @@ def process_input(user_prompt):
     st.session_state.chat_history.append({"role": "user", "content": user_prompt})
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     
-    with chat_container:
-        with st.chat_message("user"):
-            st.markdown(user_prompt)
-    
     # Process response based on condition
     if reasoning_condition == "None":
-        # Show loading dots in the reasoning column
-        with reasoning_container:
-            st.markdown("""
+        # Show loading dots in the reasoning iframe
+        loading_html = """
+        <html>
+        <head>
+            <style>
+                body {
+                    font-family: 'Inter', sans-serif;
+                    margin: 0;
+                    padding: 10px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100%;
+                }
+                .loading-dots {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .loading-dots span {
+                    background-color: #3f39e3;
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    margin: 0 4px;
+                    animation: bounce 1.5s infinite ease-in-out;
+                }
+                .loading-dots span:nth-child(2) {
+                    animation-delay: 0.2s;
+                }
+                .loading-dots span:nth-child(3) {
+                    animation-delay: 0.4s;
+                }
+                @keyframes bounce {
+                    0%, 100% {
+                        transform: translateY(0);
+                    }
+                    50% {
+                        transform: translateY(-10px);
+                    }
+                }
+            </style>
+        </head>
+        <body>
             <div class="loading-dots">
                 <span></span><span></span><span></span>
             </div>
-            """, unsafe_allow_html=True)
+        </body>
+        </html>
+        """
+        
+        iframe_container.markdown(
+            f'<div class="iframe-container"><iframe srcdoc="{loading_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+            unsafe_allow_html=True
+        )
         
         # Get the final response
         response = client.chat.completions.create(
@@ -230,26 +295,24 @@ def process_input(user_prompt):
         # Simulate thinking time
         time.sleep(2)
         
-        # Clear the reasoning column
-        with reasoning_container:
-            st.empty()
+        # Clear the reasoning iframe
+        iframe_container.empty()
         
-        # Display the response in the chat column
-        with chat_container:
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                
-                # Stream the response word by word
-                for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        word = chunk.choices[0].delta.content
-                        full_response += word
-                        message_placeholder.markdown(full_response)
-                
-                # Add the final response to chat history
-                st.session_state.chat_history.append({"role": "assistant", "content": full_response})
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Display the response in the chat
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            # Stream the response word by word
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    word = chunk.choices[0].delta.content
+                    full_response += word
+                    message_placeholder.markdown(full_response)
+            
+            # Add the final response to chat history
+            st.session_state.chat_history.append({"role": "assistant", "content": full_response})
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
     
     elif reasoning_condition == "Short":
         # Get reasoning with 2-3 sentences
@@ -285,22 +348,34 @@ def process_input(user_prompt):
                     if current_line:
                         displayed_text += "<br>" + current_line
                     
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                    # Update the reasoning iframe
+                    reasoning_html = update_reasoning_content(displayed_text)
+                    iframe_container.markdown(
+                        f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                        unsafe_allow_html=True
+                    )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
                     
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                    # Update the reasoning iframe
+                    reasoning_html = update_reasoning_content(displayed_text)
+                    iframe_container.markdown(
+                        f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                        unsafe_allow_html=True
+                    )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            update_reasoning(displayed_text)
+            reasoning_html = update_reasoning_content(displayed_text)
+            iframe_container.markdown(
+                f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                unsafe_allow_html=True
+            )
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -315,22 +390,21 @@ def process_input(user_prompt):
         # Wait a moment to let user read the reasoning
         time.sleep(1)
         
-        # Display the response in the chat column
-        with chat_container:
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                
-                # Stream the response word by word
-                for chunk in final_response:
-                    if chunk.choices[0].delta.content:
-                        word = chunk.choices[0].delta.content
-                        full_response += word
-                        message_placeholder.markdown(full_response)
-                
-                # Add the final response to chat history
-                st.session_state.chat_history.append({"role": "assistant", "content": full_response})
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Display the response in the chat
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            # Stream the response word by word
+            for chunk in final_response:
+                if chunk.choices[0].delta.content:
+                    word = chunk.choices[0].delta.content
+                    full_response += word
+                    message_placeholder.markdown(full_response)
+            
+            # Add the final response to chat history
+            st.session_state.chat_history.append({"role": "assistant", "content": full_response})
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
     
     elif reasoning_condition == "Long":
         # Get detailed reasoning
@@ -366,22 +440,34 @@ def process_input(user_prompt):
                     if current_line:
                         displayed_text += "<br>" + current_line
                     
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                    # Update the reasoning iframe
+                    reasoning_html = update_reasoning_content(displayed_text)
+                    iframe_container.markdown(
+                        f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                        unsafe_allow_html=True
+                    )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
                     
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                    # Update the reasoning iframe
+                    reasoning_html = update_reasoning_content(displayed_text)
+                    iframe_container.markdown(
+                        f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                        unsafe_allow_html=True
+                    )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            update_reasoning(displayed_text)
+            reasoning_html = update_reasoning_content(displayed_text)
+            iframe_container.markdown(
+                f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+                unsafe_allow_html=True
+            )
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -396,58 +482,29 @@ def process_input(user_prompt):
         # Wait a moment to let user read the reasoning
         time.sleep(1)
         
-        # Display the response in the chat column
-        with chat_container:
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                full_response = ""
-                
-                # Stream the response word by word
-                for chunk in final_response:
-                    if chunk.choices[0].delta.content:
-                        word = chunk.choices[0].delta.content
-                        full_response += word
-                        message_placeholder.markdown(full_response)
-                
-                # Add the final response to chat history
-                st.session_state.chat_history.append({"role": "assistant", "content": full_response})
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Display the response in the chat
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            # Stream the response word by word
+            for chunk in final_response:
+                if chunk.choices[0].delta.content:
+                    word = chunk.choices[0].delta.content
+                    full_response += word
+                    message_placeholder.markdown(full_response)
+            
+            # Add the final response to chat history
+            st.session_state.chat_history.append({"role": "assistant", "content": full_response})
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # Handle user input
 if prompt:
     process_input(prompt)
-
-# Apply JavaScript to ensure the reasoning column stays fixed
-components.html("""
-<script>
-    // Function to position the reasoning column
-    function positionReasoningColumn() {
-        setTimeout(function() {
-            const reasoningCol = document.getElementById('reasoning-column');
-            if (reasoningCol) {
-                reasoningCol.style.position = 'fixed';
-                reasoningCol.style.right = '20px';
-                reasoningCol.style.top = '100px';
-                reasoningCol.style.width = '25%';
-                reasoningCol.style.maxHeight = '80vh';
-                reasoningCol.style.overflowY = 'auto';
-                reasoningCol.style.zIndex = '1000';
-                reasoningCol.style.background = 'white';
-                reasoningCol.style.padding = '10px';
-                reasoningCol.style.borderRadius = '5px';
-                reasoningCol.style.boxShadow = '0 0 10px rgba(0,0,0,0.1)';
-            }
-        }, 100);
-    }
-    
-    // Run when DOM content is loaded
-    document.addEventListener('DOMContentLoaded', positionReasoningColumn);
-    
-    // Run on any changes to the DOM (for Streamlit's dynamic updates)
-    const observer = new MutationObserver(positionReasoningColumn);
-    observer.observe(document.body, { childList: true, subtree: true });
-    
-    // Also run now
-    positionReasoningColumn();
-</script>
-""", height=0)
+elif st.session_state.reasoning_content:
+    # If there's existing reasoning content, keep displaying it
+    reasoning_html = update_reasoning_content(st.session_state.reasoning_content)
+    iframe_container.markdown(
+        f'<div class="iframe-container"><iframe srcdoc="{reasoning_html}" class="reasoning-iframe" height="{st.session_state.iframe_height}px"></iframe></div>',
+        unsafe_allow_html=True
+    )
