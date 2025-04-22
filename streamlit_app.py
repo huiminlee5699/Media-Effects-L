@@ -71,36 +71,6 @@ st.markdown("""
             transform: translateY(-10px);
         }
     }
-    
-    /* Two-column layout for response area */
-    .chat-layout {
-        display: flex;
-        width: 100%;
-    }
-    .reasoning-area {
-        width: 35%;
-        padding-right: 15px;
-        border-right: 1px solid #eee;
-    }
-    .response-area {
-        width: 65%;
-        padding-left: 15px;
-    }
-    
-    /* Mobile responsiveness */
-    @media (max-width: 768px) {
-        .chat-layout {
-            flex-direction: column;
-        }
-        .reasoning-area, .response-area {
-            width: 100%;
-            padding: 0;
-            border-right: none;
-        }
-        .reasoning-area {
-            margin-bottom: 15px;
-        }
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,20 +120,14 @@ if prompt := st.chat_input("What would you like to know today?"):
     
     # Create a two-column layout for the assistant's response
     with st.chat_message("assistant"):
-        # Use custom CSS for layout
-        st.markdown('<div class="chat-layout">', unsafe_allow_html=True)
+        # Create explicit columns using Streamlit's column feature
+        col1, col2 = st.columns([35, 65])
         
-        # Left column for reasoning
-        st.markdown('<div class="reasoning-area" id="reasoning-area">', unsafe_allow_html=True)
-        reasoning_placeholder = st.empty()
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Right column for response
-        st.markdown('<div class="response-area" id="response-area">', unsafe_allow_html=True)
-        response_container = st.empty()
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col1:
+            reasoning_placeholder = st.empty()
+            
+        with col2:
+            response_container = st.empty()
         
         if reasoning_condition == "None":
             # Just show loading dots in the reasoning area
@@ -187,7 +151,7 @@ if prompt := st.chat_input("What would you like to know today?"):
             time.sleep(2)
             
             # Clear the reasoning area and display the final response
-            reasoning_placeholder.empty()
+            reasoning_placeholder.empty()  # We still clear the loading dots
             full_response = response.choices[0].message.content
             response_container.markdown(full_response)
             
@@ -213,6 +177,9 @@ if prompt := st.chat_input("What would you like to know today?"):
                 reasoning_placeholder.markdown(f'<div class="reasoning-cue">{sentence}</div>', unsafe_allow_html=True)
                 time.sleep(1.5)  # Wait a moment between sentences
             
+            # Set the final reasoning display to the last sentence
+            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{sentences[-1]}</div>', unsafe_allow_html=True)
+            
             # Get the final response
             final_response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -223,16 +190,10 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=True,
             )
             
-            # Stream the final response and clear reasoning when response starts
+            # Stream the final response (keep reasoning visible)
             full_response = ""
-            first_chunk = True
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
-                    if first_chunk:
-                        # Clear reasoning area when first response chunk arrives
-                        reasoning_placeholder.empty()
-                        first_chunk = False
-                    
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
             
@@ -266,18 +227,26 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Wait a moment to let user read the reasoning
             time.sleep(3)
             
-            # Stream the final response and clear reasoning when response starts
+            # Stream the final response (keep reasoning visible)
             full_response = ""
-            first_chunk = True
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
-                    if first_chunk:
-                        # Clear reasoning area when first response chunk arrives
-                        reasoning_placeholder.empty()
-                        first_chunk = False
-                    
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
         
         # Store only the final response in session state
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        final_message = full_response
+        if reasoning_condition != "None":
+            # Include both reasoning and response in the chat history
+            # This makes it look like a single message in history, but it was displayed in columns
+            reasoning_display = reasoning_text if reasoning_condition == "Long" else sentences[-1]
+            final_message = f"""<div style="display: flex; width: 100%;">
+            <div style="width: 35%; padding-right: 15px;">
+                <div class="reasoning-cue">{reasoning_display}</div>
+            </div>
+            <div style="width: 65%; padding-left: 15px;">
+                {full_response}
+            </div>
+            </div>"""
+            
+        st.session_state.messages.append({"role": "assistant", "content": final_message})
