@@ -44,6 +44,15 @@ st.markdown("""
         height: 100%;
     }
     
+    /* Make reasoning column sticky so it stays in view */
+    .sticky-reasoning {
+        position: -webkit-sticky;
+        position: sticky;
+        top: 5rem;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    
     /* Loading animation */
     .loading-dots {
         display: flex;
@@ -150,7 +159,9 @@ with col1:
 # Reasoning column
 with col2:
     # No header as requested
+    st.markdown('<div class="sticky-reasoning">', unsafe_allow_html=True)
     reasoning_placeholder = st.empty()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
@@ -239,7 +250,7 @@ def process_input(user_prompt):
                         displayed_text += "<br>" + current_line
                         
                     reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
                         unsafe_allow_html=True
                     )
                 else:
@@ -249,7 +260,7 @@ def process_input(user_prompt):
                         displayed_text += "<br>" + current_line
                         
                     reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
                         unsafe_allow_html=True
                     )
         
@@ -258,7 +269,7 @@ def process_input(user_prompt):
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
             reasoning_placeholder.markdown(
-                f'<div class="reasoning-cue">{displayed_text}</div>', 
+                f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
                 unsafe_allow_html=True
             )
         
