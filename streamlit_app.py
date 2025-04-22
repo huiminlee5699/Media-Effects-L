@@ -33,7 +33,7 @@ st.markdown("""
         font-family: 'Inter', sans-serif !important;
     }
     
-    /* Reasoning cue styling */
+    /* Sticky reasoning cue styling */
     .reasoning-cue {
         background-color: #f7f7f7;
         border-left: 3px solid #3f39e3;
@@ -41,7 +41,10 @@ st.markdown("""
         margin: 10px 0;
         font-style: italic;
         color: #555;
-        height: 100%;
+        position: sticky;
+        top: 2rem;
+        max-height: 80vh;
+        overflow-y: auto;
     }
     
     /* Loading animation */
@@ -50,6 +53,8 @@ st.markdown("""
         align-items: center;
         justify-content: center;
         margin-top: 20px;
+        position: sticky;
+        top: 2rem;
     }
     .loading-dots span {
         background-color: #3f39e3;
@@ -90,12 +95,28 @@ st.markdown("""
     /* Make column divider more visible */
     .column-divider {
         border-left: 1px solid #e0e0e0;
+        height: 100%;
+    }
+    
+    /* Fix column heights and make sure the content scrolls properly */
+    .stColumn {
         height: 100vh;
     }
     
-    /* Fix column heights */
-    .stColumn {
+    /* Ensure the right column (reasoning cue) stays fixed */
+    [data-testid="column"]:nth-of-type(2) {
+        position: sticky !important;
+        top: 0;
         height: 100vh;
+        overflow-y: auto;
+    }
+    
+    /* Make sure the reasoning container stays in view */
+    .reasoning-container {
+        position: sticky;
+        top: 2rem;
+        max-height: 80vh;
+        overflow-y: auto;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -125,32 +146,34 @@ if "messages" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Create a two-column layout
+# Create a two-column layout with specific ratios
 col1, col2 = st.columns([0.7, 0.3])
 
 # Main chat column
 with col1:
     st.subheader("Chat")
     
-    # Display the existing chat messages
-    for message in st.session_state.chat_history:
-        if message["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(message["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(message["content"])
-    
-    # Create a container for the conversation
+    # Create a scrollable container for the chat
     chat_container = st.container()
     
-    # Add chat input
+    # Display the existing chat messages
+    with chat_container:
+        for message in st.session_state.chat_history:
+            if message["role"] == "user":
+                with st.chat_message("user"):
+                    st.markdown(message["content"])
+            else:
+                with st.chat_message("assistant"):
+                    st.markdown(message["content"])
+    
+    # Add chat input at the bottom
     prompt = st.chat_input("What would you like to know today?")
 
-# Reasoning column
+# Reasoning column - using HTML for better positioning
 with col2:
-    # No header as requested
+    st.markdown('<div class="reasoning-container">', unsafe_allow_html=True)
     reasoning_placeholder = st.empty()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
