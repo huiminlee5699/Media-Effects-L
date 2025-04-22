@@ -87,39 +87,69 @@ st.markdown("""
         border-left: 1px solid #eee;
     }
     
-    /* Custom Dropdown Styling */
-    .reasoning-dropdown {
-        border: 1px solid #e0e0e0;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        overflow: hidden;
+    /* Simple collapsible styling */
+    .collapsible {
         background-color: #f7f7f7;
-    }
-    .dropdown-header {
-        padding: 12px 15px;
         cursor: pointer;
+        padding: 12px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 14px;
+        border-left: 3px solid #3f39e3;
+        transition: 0.4s;
+        border-radius: 4px 4px 0 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background-color: #f7f7f7;
-        border-bottom: 1px solid #e0e0e0;
-        font-weight: 500;
-        color: #333;
+        margin-bottom: 0;
     }
-    .dropdown-header:hover {
+
+    .active-collapsible, .collapsible:hover {
         background-color: #f0f0f0;
     }
-    .dropdown-content {
-        padding: 12px 15px;
-        background-color: white;
-        border-top: 1px solid #e0e0e0;
+
+    .collapsible:after {
+        content: '\\002B';
+        font-weight: bold;
+        float: right;
+        margin-left: 5px;
+    }
+
+    .active-collapsible:after {
+        content: '\\2212';
+    }
+
+    .collapsible-content {
+        padding: 0 12px;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.2s ease-out;
+        background-color: #f7f7f7;
+        border-left: 3px solid #3f39e3;
+        border-radius: 0 0 4px 4px;
         font-style: italic;
         color: #555;
     }
-    .dropdown-icon {
-        transition: transform 0.3s ease;
-    }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var coll = document.getElementsByClassName("collapsible");
+    for (var i = 0; i < coll.length; i++) {
+        coll[i].addEventListener("click", function() {
+            this.classList.toggle("active-collapsible");
+            var content = this.nextElementSibling;
+            if (content.style.maxHeight) {
+                content.style.maxHeight = null;
+            } else {
+                content.style.maxHeight = content.scrollHeight + "px";
+            }
+        });
+    }
+});
+</script>
 """, unsafe_allow_html=True)
 
 # Show title and description.
@@ -148,8 +178,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "reasoning_history" not in st.session_state:
     st.session_state.reasoning_history = []
-if "dropdown_states" not in st.session_state:
-    st.session_state.dropdown_states = {}
 
 # Function to split text into sentences
 def split_into_sentences(text):
@@ -157,96 +185,18 @@ def split_into_sentences(text):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return [s for s in sentences if s.strip()]
 
-# Function to create dropdown component for reasoning
-def create_dropdown(id, header_text, content):
-    dropdown_key = f"dropdown_{id}"
-    if dropdown_key not in st.session_state.dropdown_states:
-        st.session_state.dropdown_states[dropdown_key] = False  # Default closed
-    
-    is_open = st.session_state.dropdown_states.get(dropdown_key, False)
-    icon = "▼" if is_open else "▶"
-    
+# Function to create collapsible element (simpler than a dropdown)
+def create_collapsible(header_text, content_text):
     # Truncate header text if it's too long
     header_display = header_text[:50] + "..." if len(header_text) > 50 else header_text
     
     html = f"""
-    <div class="reasoning-dropdown" id="{dropdown_key}">
-        <div class="dropdown-header" onclick="toggleDropdown('{dropdown_key}')">
-            <span>{header_display}</span>
-            <span class="dropdown-icon" id="{dropdown_key}_icon">{icon}</span>
-        </div>
-        <div class="dropdown-content" id="{dropdown_key}_content" style="display: {'block' if is_open else 'none'}">
-            {content}
-        </div>
+    <button class="collapsible">{header_display}</button>
+    <div class="collapsible-content">
+        <p>{content_text}</p>
     </div>
-    <script>
-    function toggleDropdown(id) {{
-        const content = document.getElementById(id + '_content');
-        const icon = document.getElementById(id + '_icon');
-        if (content.style.display === 'none') {{
-            content.style.display = 'block';
-            icon.innerHTML = '▼';
-            // Send message to Streamlit to update state
-            const data = {{
-                dropdown: id,
-                isOpen: true
-            }};
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: data
-            }}, '*');
-        }} else {{
-            content.style.display = 'none';
-            icon.innerHTML = '▶';
-            // Send message to Streamlit to update state
-            const data = {{
-                dropdown: id,
-                isOpen: false
-            }};
-            window.parent.postMessage({{
-                type: 'streamlit:setComponentValue',
-                value: data
-            }}, '*');
-        }}
-    }}
-    </script>
     """
-    components.html(html, height=60 if not is_open else 150)
-    return is_open
-
-# Custom component to handle dropdown state changes
-def handle_dropdown_change():
-    key = "dropdown_handler"
-    ret = components.html(
-        """
-        <script>
-        window.addEventListener('message', function(event) {
-            const data = event.data;
-            if (data.type === 'streamlit:componentReady') {
-                window.parent.addEventListener('message', function(parentEvent) {
-                    const parentData = parentEvent.data;
-                    if (parentData.dropdown) {
-                        window.parent.postMessage({
-                            type: 'streamlit:setComponentValue',
-                            value: parentData
-                        }, '*');
-                    }
-                });
-            }
-        });
-        </script>
-        """,
-        height=0,
-        key=key
-    )
-    if ret and 'dropdown' in ret:
-        dropdown_id = ret['dropdown']
-        is_open = ret['isOpen']
-        st.session_state.dropdown_states[dropdown_id] = is_open
-        st.experimental_rerun()
-
-# Initialize dropdown handler
-handle_dropdown_change()
+    return html
 
 # Display the existing chat messages
 for i, message in enumerate(st.session_state.messages):
@@ -256,13 +206,14 @@ for i, message in enumerate(st.session_state.messages):
             col1, col2 = st.columns([35, 65])
             
             with col1:
-                # Create dropdown for reasoning
+                # Create collapsible for reasoning
                 reasoning = st.session_state.reasoning_history[i]
                 if reasoning:  # Only display if there's reasoning
                     # Get the first sentence for the header
                     sentences = split_into_sentences(reasoning)
                     header = sentences[0] if sentences else "Reasoning"
-                    create_dropdown(f"history_{i}", header, reasoning)
+                    collapsible_html = create_collapsible(header, reasoning)
+                    st.markdown(collapsible_html, unsafe_allow_html=True)
             
             with col2:
                 # Display the response
@@ -355,10 +306,11 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=True,
             )
             
-            # Before streaming response, replace the reasoning area with dropdown
+            # Before streaming response, replace the reasoning area with collapsible
+            sentences = split_into_sentences(reasoning_text)
             header = sentences[0] if sentences else "Reasoning"
-            with reasoning_placeholder.container():
-                create_dropdown(f"current", header, reasoning_text)
+            collapsible_html = create_collapsible(header, reasoning_text)
+            reasoning_placeholder.markdown(collapsible_html, unsafe_allow_html=True)
             
             # Stream the final response (keep reasoning visible)
             full_response = ""
@@ -400,11 +352,11 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Wait a moment to let user read the reasoning
             time.sleep(3)
             
-            # Before streaming response, replace the reasoning area with dropdown
+            # Before streaming response, replace the reasoning area with collapsible
             sentences = split_into_sentences(reasoning_text)
             header = sentences[0] if sentences else "Reasoning"
-            with reasoning_placeholder.container():
-                create_dropdown(f"current", header, reasoning_text)
+            collapsible_html = create_collapsible(header, reasoning_text)
+            reasoning_placeholder.markdown(collapsible_html, unsafe_allow_html=True)
             
             # Stream the final response (keep reasoning visible)
             full_response = ""
