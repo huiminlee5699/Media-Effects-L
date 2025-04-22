@@ -159,19 +159,15 @@ if "messages" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Modified layout - using a single column for chat and fixed positioning for reasoning
-col1 = st.container()
-
-# Add a fixed container for reasoning (outside columns)
-reasoning_container = st.container()
-reasoning_placeholder = reasoning_container.empty()
+# Create a proper two-column layout
+col1, col2 = st.columns([0.7, 0.3])
 
 # Main chat column
 with col1:
     st.subheader("Chat")
     
-    # Create a scrollable container for the chat with a class for styling
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    # Create a scrollable container for chat history
+    st.markdown('<div class="chat-scroll-container">', unsafe_allow_html=True)
     chat_container = st.container()
     
     # Display the existing chat messages
@@ -187,7 +183,16 @@ with col1:
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Add chat input at the bottom
+    st.markdown('<div class="input-container">', unsafe_allow_html=True)
     prompt = st.chat_input("What would you like to know today?")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Reasoning column
+with col2:
+    # Create container for the reasoning cue
+    st.markdown('<div class="reasoning-container">', unsafe_allow_html=True)
+    reasoning_placeholder = st.empty()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
