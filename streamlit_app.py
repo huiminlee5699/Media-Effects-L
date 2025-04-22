@@ -9,6 +9,7 @@ st.set_page_config(
     layout="wide"  # Use wide layout to accommodate columns
 )
 
+# Custom CSS for styling and to fix the reasoning column
 st.markdown("""
 <style>
     /* Import fonts */
@@ -41,16 +42,6 @@ st.markdown("""
         margin: 10px 0;
         font-style: italic;
         color: #555;
-        height: 100%;
-    }
-    
-    /* Make reasoning column sticky so it stays in view */
-    .sticky-reasoning {
-        position: -webkit-sticky;
-        position: sticky;
-        top: 5rem;
-        max-height: 80vh;
-        overflow-y: auto;
     }
     
     /* Loading animation */
@@ -89,25 +80,58 @@ st.markdown("""
         padding-bottom: 1rem;
     }
     
-    /* Style the chat input to be at the bottom of left column */
-    .chat-input {
-        position: fixed;
-        bottom: 20px;
-        width: calc(70% - 40px);
+    /* Make the main layout a two-column grid */
+    .main-grid {
+        display: grid;
+        grid-template-columns: 7fr 3fr;
+        gap: 20px;
+        height: calc(100vh - 100px);
     }
     
-    /* Make column divider more visible */
-    .column-divider {
-        border-left: 1px solid #e0e0e0;
-        height: 100vh;
+    /* Chat column */
+    .chat-column {
+        overflow-y: auto;
+        padding-right: 20px;
     }
     
-    /* Fix column heights */
-    .stColumn {
-        height: 100vh;
+    /* Fixed reasoning column */
+    .reasoning-column {
+        position: sticky;
+        top: 0;
+        height: fit-content;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Add custom components.html to fix reasoning column
+components.html("""
+<script>
+// Function to keep reasoning in view
+function setupReasoningColumn() {
+    const observer = new MutationObserver(function(mutations) {
+        const reasoningCol = document.querySelector('.reasoning-column');
+        if (reasoningCol) {
+            reasoningCol.style.position = 'fixed';
+            reasoningCol.style.right = '20px';
+            reasoningCol.style.top = '100px';
+            reasoningCol.style.width = '25%';
+            reasoningCol.style.maxHeight = '80vh';
+            reasoningCol.style.overflowY = 'auto';
+            observer.disconnect();
+        }
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// Run on page load
+document.addEventListener('DOMContentLoaded', setupReasoningColumn);
+// Also run now in case page is already loaded
+setupReasoningColumn();
+</script>
+""", height=0)
 
 # Show title
 st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;'>💬 MEDIA EFFECTS TEST</h1>", unsafe_allow_html=True)
@@ -134,14 +158,28 @@ if "messages" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Create a two-column layout
-col1, col2 = st.columns([0.7, 0.3])
+if "reasoning_content" not in st.session_state:
+    st.session_state.reasoning_content = ""
 
-# Main chat column
-with col1:
-    st.subheader("Chat")
-    
-    # Display the existing chat messages
+# Create a custom two-column layout using HTML/CSS
+st.markdown("""
+<div class="main-grid">
+    <div class="chat-column" id="chat-column">
+        <h3>Chat</h3>
+        <div id="messages-container"></div>
+    </div>
+    <div class="reasoning-column" id="reasoning-column">
+        <div id="reasoning-container"></div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Create containers for our content
+chat_container = st.container()
+reasoning_container = st.container()
+
+# Display chat history in the left column
+with chat_container:
     for message in st.session_state.chat_history:
         if message["role"] == "user":
             with st.chat_message("user"):
@@ -149,19 +187,15 @@ with col1:
         else:
             with st.chat_message("assistant"):
                 st.markdown(message["content"])
-    
-    # Create a container for the conversation
-    chat_container = st.container()
-    
-    # Add chat input
-    prompt = st.chat_input("What would you like to know today?")
 
-# Reasoning column
-with col2:
-    # No header as requested
-    st.markdown('<div class="sticky-reasoning">', unsafe_allow_html=True)
-    reasoning_placeholder = st.empty()
-    st.markdown('</div>', unsafe_allow_html=True)
+# Add chat input
+prompt = st.chat_input("What would you like to know today?")
+
+# Function to update the reasoning container
+def update_reasoning(content):
+    st.session_state.reasoning_content = content
+    with reasoning_container:
+        st.markdown(f'<div class="reasoning-cue">{content}</div>', unsafe_allow_html=True)
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
@@ -176,11 +210,12 @@ def process_input(user_prompt):
     # Process response based on condition
     if reasoning_condition == "None":
         # Show loading dots in the reasoning column
-        reasoning_placeholder.markdown("""
-        <div class="loading-dots">
-            <span></span><span></span><span></span>
-        </div>
-        """, unsafe_allow_html=True)
+        with reasoning_container:
+            st.markdown("""
+            <div class="loading-dots">
+                <span></span><span></span><span></span>
+            </div>
+            """, unsafe_allow_html=True)
         
         # Get the final response
         response = client.chat.completions.create(
@@ -196,7 +231,8 @@ def process_input(user_prompt):
         time.sleep(2)
         
         # Clear the reasoning column
-        reasoning_placeholder.empty()
+        with reasoning_container:
+            st.empty()
         
         # Display the response in the chat column
         with chat_container:
@@ -248,30 +284,23 @@ def process_input(user_prompt):
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    # Update the reasoning container
+                    update_reasoning(displayed_text)
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    # Update the reasoning container
+                    update_reasoning(displayed_text)
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            reasoning_placeholder.markdown(
-                f'<div class="reasoning-cue sticky-content">{displayed_text}</div>', 
-                unsafe_allow_html=True
-            )
+            update_reasoning(displayed_text)
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -336,30 +365,23 @@ def process_input(user_prompt):
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    # Update the reasoning container
+                    update_reasoning(displayed_text)
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    # Update the reasoning container
+                    update_reasoning(displayed_text)
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            reasoning_placeholder.markdown(
-                f'<div class="reasoning-cue">{displayed_text}</div>', 
-                unsafe_allow_html=True
-            )
+            update_reasoning(displayed_text)
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -394,3 +416,38 @@ def process_input(user_prompt):
 # Handle user input
 if prompt:
     process_input(prompt)
+
+# Apply JavaScript to ensure the reasoning column stays fixed
+components.html("""
+<script>
+    // Function to position the reasoning column
+    function positionReasoningColumn() {
+        setTimeout(function() {
+            const reasoningCol = document.getElementById('reasoning-column');
+            if (reasoningCol) {
+                reasoningCol.style.position = 'fixed';
+                reasoningCol.style.right = '20px';
+                reasoningCol.style.top = '100px';
+                reasoningCol.style.width = '25%';
+                reasoningCol.style.maxHeight = '80vh';
+                reasoningCol.style.overflowY = 'auto';
+                reasoningCol.style.zIndex = '1000';
+                reasoningCol.style.background = 'white';
+                reasoningCol.style.padding = '10px';
+                reasoningCol.style.borderRadius = '5px';
+                reasoningCol.style.boxShadow = '0 0 10px rgba(0,0,0,0.1)';
+            }
+        }, 100);
+    }
+    
+    // Run when DOM content is loaded
+    document.addEventListener('DOMContentLoaded', positionReasoningColumn);
+    
+    // Run on any changes to the DOM (for Streamlit's dynamic updates)
+    const observer = new MutationObserver(positionReasoningColumn);
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Also run now
+    positionReasoningColumn();
+</script>
+""", height=0)
