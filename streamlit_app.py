@@ -9,7 +9,6 @@ st.set_page_config(
     layout="wide"  # Use wide layout to accommodate columns
 )
 
-# Custom CSS for styling
 st.markdown("""
 <style>
     /* Import fonts */
@@ -42,6 +41,7 @@ st.markdown("""
         margin: 10px 0;
         font-style: italic;
         color: #555;
+        height: 100%;
     }
     
     /* Loading animation */
@@ -74,30 +74,28 @@ st.markdown("""
         }
     }
     
-    /* Make the sidebar sticky */
-    [data-testid="stSidebar"] {
-        position: fixed !important;
-    }
-    
     /* Fix some Streamlit UI elements */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
     
-    /* Fixed reasoning section */
-    .fixed-reasoning {
+    /* Style the chat input to be at the bottom of left column */
+    .chat-input {
         position: fixed;
-        top: 150px;
-        right: 30px;
-        width: 25%;
-        max-height: 70vh;
-        overflow-y: auto;
-        z-index: 1000;
-        background-color: white;
-        padding: 10px;
-        border-radius: 5px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        bottom: 20px;
+        width: calc(70% - 40px);
+    }
+    
+    /* Make column divider more visible */
+    .column-divider {
+        border-left: 1px solid #e0e0e0;
+        height: 100vh;
+    }
+    
+    /* Fix column heights */
+    .stColumn {
+        height: 100vh;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -107,16 +105,12 @@ st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;
 
 # Experimental condition selector (you would remove this in the actual study
 # and set it based on participant assignment)
-with st.sidebar:
-    reasoning_condition = st.selectbox(
-        "Reasoning Cue Condition",
-        ["None", "Short", "Long"],
-        help="Select which type of reasoning cues to display (for testing)",
-        key="condition_selector"
-    )
-
-# Place for fixed reasoning display (using custom HTML/CSS instead of iframe)
-reasoning_container = st.container()
+reasoning_condition = st.sidebar.selectbox(
+    "Reasoning Cue Condition",
+    ["None", "Short", "Long"],
+    help="Select which type of reasoning cues to display (for testing)",
+    key="condition_selector"
+)
 
 # Use the API key from Streamlit secrets
 openai_api_key = st.secrets["openai_api_key"]
@@ -131,14 +125,11 @@ if "messages" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-if "reasoning_content" not in st.session_state:
-    st.session_state.reasoning_content = ""
+# Create a two-column layout
+col1, col2 = st.columns([0.7, 0.3])
 
-# Create two columns for layout
-chat_col, _ = st.columns([7, 3])
-
-# Display chat in the left column
-with chat_col:
+# Main chat column
+with col1:
     st.subheader("Chat")
     
     # Display the existing chat messages
@@ -150,43 +141,16 @@ with chat_col:
             with st.chat_message("assistant"):
                 st.markdown(message["content"])
     
-    # Add chat input at the bottom
+    # Create a container for the conversation
+    chat_container = st.container()
+    
+    # Add chat input
     prompt = st.chat_input("What would you like to know today?")
 
-# JavaScript to ensure the reasoning container stays fixed
-components.html("""
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Function to fix the reasoning container position
-    const fixReasoningPosition = () => {
-        const reasoningDiv = document.getElementById('fixed-reasoning');
-        if (reasoningDiv) {
-            reasoningDiv.className = 'fixed-reasoning';
-        }
-    };
-    
-    // Run when DOM loads
-    fixReasoningPosition();
-    
-    // Also run on scroll events
-    window.addEventListener('scroll', fixReasoningPosition);
-    
-    // Create a mutation observer to detect changes in the DOM
-    const observer = new MutationObserver(fixReasoningPosition);
-    observer.observe(document.body, { subtree: true, childList: true });
-});
-</script>
-""", height=0)
-
-# Function to update the reasoning content
-def update_reasoning(content):
-    st.session_state.reasoning_content = content
-    
-    # Display the reasoning in a fixed div
-    reasoning_container.markdown(
-        f'<div id="fixed-reasoning" class="fixed-reasoning"><div class="reasoning-cue">{content}</div></div>',
-        unsafe_allow_html=True
-    )
+# Reasoning column
+with col2:
+    # No header as requested
+    reasoning_placeholder = st.empty()
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
@@ -194,13 +158,18 @@ def process_input(user_prompt):
     st.session_state.chat_history.append({"role": "user", "content": user_prompt})
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     
+    with chat_container:
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+    
     # Process response based on condition
     if reasoning_condition == "None":
         # Show loading dots in the reasoning column
-        reasoning_container.markdown(
-            '<div id="fixed-reasoning" class="fixed-reasoning"><div class="loading-dots"><span></span><span></span><span></span></div></div>',
-            unsafe_allow_html=True
-        )
+        reasoning_placeholder.markdown("""
+        <div class="loading-dots">
+            <span></span><span></span><span></span>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Get the final response
         response = client.chat.completions.create(
@@ -216,10 +185,10 @@ def process_input(user_prompt):
         time.sleep(2)
         
         # Clear the reasoning column
-        reasoning_container.empty()
+        reasoning_placeholder.empty()
         
         # Display the response in the chat column
-        with chat_col:
+        with chat_container:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
@@ -268,23 +237,30 @@ def process_input(user_prompt):
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                    
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                    
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            update_reasoning(displayed_text)
+            reasoning_placeholder.markdown(
+                f'<div class="reasoning-cue">{displayed_text}</div>', 
+                unsafe_allow_html=True
+            )
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -300,7 +276,7 @@ def process_input(user_prompt):
         time.sleep(1)
         
         # Display the response in the chat column
-        with chat_col:
+        with chat_container:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
@@ -349,23 +325,30 @@ def process_input(user_prompt):
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                    
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                    
-                    # Update the reasoning container
-                    update_reasoning(displayed_text)
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            update_reasoning(displayed_text)
+            reasoning_placeholder.markdown(
+                f'<div class="reasoning-cue">{displayed_text}</div>', 
+                unsafe_allow_html=True
+            )
         
         # Get the final response
         final_response = client.chat.completions.create(
@@ -381,7 +364,7 @@ def process_input(user_prompt):
         time.sleep(1)
         
         # Display the response in the chat column
-        with chat_col:
+        with chat_container:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
@@ -400,6 +383,3 @@ def process_input(user_prompt):
 # Handle user input
 if prompt:
     process_input(prompt)
-elif st.session_state.reasoning_content:
-    # If there's existing reasoning content, keep displaying it
-    update_reasoning(st.session_state.reasoning_content)
