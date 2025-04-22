@@ -41,10 +41,15 @@ st.markdown("""
         margin: 10px 0;
         font-style: italic;
         color: #555;
-        position: sticky;
-        top: 2rem;
-        max-height: 80vh;
+        /* Using fixed positioning instead of sticky */
+        position: fixed !important;
+        top: 5rem;
+        right: 2%;
+        width: 25%;
+        max-height: 70vh;
         overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     
     /* Loading animation */
@@ -53,8 +58,12 @@ st.markdown("""
         align-items: center;
         justify-content: center;
         margin-top: 20px;
-        position: sticky;
-        top: 2rem;
+        /* Using fixed positioning instead of sticky */
+        position: fixed;
+        top: 5rem;
+        right: 2%;
+        width: 25%;
+        z-index: 1000;
     }
     .loading-dots span {
         background-color: #3f39e3;
@@ -103,20 +112,24 @@ st.markdown("""
         height: 100vh;
     }
     
-    /* Ensure the right column (reasoning cue) stays fixed */
-    [data-testid="column"]:nth-of-type(2) {
-        position: sticky !important;
-        top: 0;
-        height: 100vh;
-        overflow-y: auto;
+    /* We don't need these with fixed positioning approach */
+    /* Ensure main content area has appropriate width */
+    [data-testid="column"]:nth-of-type(1) {
+        width: 70% !important;
     }
     
-    /* Make sure the reasoning container stays in view */
-    .reasoning-container {
-        position: sticky;
-        top: 2rem;
-        max-height: 80vh;
-        overflow-y: auto;
+    /* Hide the second column as we're using fixed positioning instead */
+    [data-testid="column"]:nth-of-type(2) {
+        visibility: hidden;
+        width: 1px !important;
+        overflow: hidden;
+    }
+    
+    /* Make chat container take up proper space */
+    .chat-container {
+        width: 100%;
+        max-width: 65%;
+        margin-left: 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -146,14 +159,19 @@ if "messages" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Create a two-column layout with specific ratios
-col1, col2 = st.columns([0.7, 0.3])
+# Modified layout - using a single column for chat and fixed positioning for reasoning
+col1 = st.container()
+
+# Add a fixed container for reasoning (outside columns)
+reasoning_container = st.container()
+reasoning_placeholder = reasoning_container.empty()
 
 # Main chat column
 with col1:
     st.subheader("Chat")
     
-    # Create a scrollable container for the chat
+    # Create a scrollable container for the chat with a class for styling
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     chat_container = st.container()
     
     # Display the existing chat messages
@@ -166,14 +184,10 @@ with col1:
                 with st.chat_message("assistant"):
                     st.markdown(message["content"])
     
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     # Add chat input at the bottom
     prompt = st.chat_input("What would you like to know today?")
-
-# Reasoning column - using HTML for better positioning
-with col2:
-    st.markdown('<div class="reasoning-container">', unsafe_allow_html=True)
-    reasoning_placeholder = st.empty()
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # Function to process user input and generate responses
 def process_input(user_prompt):
