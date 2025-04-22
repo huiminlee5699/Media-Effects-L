@@ -160,7 +160,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # Create a proper two-column layout
-col1, col2 = st.columns([0.7, 0.25])
+col1, col2 = st.columns([0.7, 0.5])
 
 # Main chat column
 with col1:
