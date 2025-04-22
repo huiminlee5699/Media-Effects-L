@@ -249,7 +249,7 @@ def process_input(user_prompt):
     elif reasoning_condition == "Short":
         # Get reasoning with 2-3 sentences
         reasoning_prompt = [
-            {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a brief reasoning that shows how you're approaching their question. Use 2-3 short sentences. Don't answer the question yet, just show your thinking approach."},
+            {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a brief reasoning that shows how you're approaching their question. Use 2-3 short sentences that are less than 10 words each. Don't answer the question yet, just show your thinking approach."},
             {"role": "user", "content": user_prompt}
         ]
         
