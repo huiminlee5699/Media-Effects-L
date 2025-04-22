@@ -6,6 +6,7 @@ import random
 
 st.set_page_config(
     page_title="💬 MEDIA EFFECTS TEST",
+    layout="wide"  # Use wide layout to accommodate columns
 )
 
 st.markdown("""
@@ -19,6 +20,7 @@ st.markdown("""
         font-family: 'Inria Sans', sans-serif !important;
         color: #3f39e3 !important;
     }
+    
     /* Additional selectors to ensure title styling */
     .st-emotion-cache-10trblm h1, 
     .stMarkdown h1 {
@@ -39,6 +41,7 @@ st.markdown("""
         margin: 10px 0;
         font-style: italic;
         color: #555;
+        height: 100%;
     }
     
     /* Loading animation */
@@ -46,6 +49,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
+        margin-top: 20px;
     }
     .loading-dots span {
         background-color: #3f39e3;
@@ -69,12 +73,35 @@ st.markdown("""
             transform: translateY(-10px);
         }
     }
+    
+    /* Fix some Streamlit UI elements */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    
+    /* Style the chat input to be at the bottom of left column */
+    .chat-input {
+        position: fixed;
+        bottom: 20px;
+        width: calc(70% - 40px);
+    }
+    
+    /* Make column divider more visible */
+    .column-divider {
+        border-left: 1px solid #e0e0e0;
+        height: 100vh;
+    }
+    
+    /* Fix column heights */
+    .stColumn {
+        height: 100vh;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Show title and description.
+# Show title
 st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;'>💬 MEDIA EFFECTS TEST</h1>", unsafe_allow_html=True)
-# Welcome message removed as requested
 
 # Experimental condition selector (you would remove this in the actual study
 # and set it based on participant assignment)
@@ -93,219 +120,265 @@ client = OpenAI(api_key=openai_api_key)
 # Create session state variables
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-# Display the existing chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# Create a chat input field
-if prompt := st.chat_input("What would you like to know today?"):
-    # Store and display the current prompt
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
     
-    # Display reasoning based on condition
-    with st.chat_message("assistant"):
-        reasoning_placeholder = st.empty()
-        response_container = st.empty()
+if "reasoning_text" not in st.session_state:
+    st.session_state.reasoning_text = ""
+
+# Create a two-column layout
+col1, col2 = st.columns([0.7, 0.3])
+
+# Main chat column
+with col1:
+    st.subheader("Chat")
+    
+    # Display the existing chat messages
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(message["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(message["content"])
+    
+    # Create a placeholder for streaming responses
+    response_placeholder = st.empty()
+    
+    # Add chat input at the bottom
+    prompt = st.chat_input("What would you like to know today?")
+
+# Reasoning column
+with col2:
+    st.subheader("AI Reasoning")
+    
+    # Create a placeholder for the reasoning content
+    reasoning_placeholder = st.empty()
+    
+    # Display current reasoning if available
+    if st.session_state.reasoning_text:
+        reasoning_placeholder.markdown(f'<div class="reasoning-cue">{st.session_state.reasoning_text}</div>', unsafe_allow_html=True)
+
+# Handle user input and generate responses
+if prompt:
+    # Store the current prompt
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Clear the previous reasoning
+    st.session_state.reasoning_text = ""
+    reasoning_placeholder.empty()
+    
+    # Process based on condition
+    if reasoning_condition == "None":
+        # Just show loading dots in the reasoning column
+        reasoning_placeholder.markdown("""
+        <div class="loading-dots">
+            <span></span><span></span><span></span>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if reasoning_condition == "None":
-            # Just show loading dots
-            reasoning_placeholder.markdown("""
-            <div class="loading-dots">
-                <span></span><span></span><span></span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Get the final response without showing reasoning
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": m["role"], "content": m["content"]} 
-                    for m in st.session_state.messages
-                ],
-                stream=True,
-            )
-            
-            # Simulate thinking time before showing response
-            time.sleep(2)
-            
-            # Clear the loading animation
-            reasoning_placeholder.empty()
-            
-            # Stream the final response word by word
+        # Get the final response without showing reasoning
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": m["role"], "content": m["content"]} 
+                for m in st.session_state.messages
+            ],
+            stream=True,
+        )
+        
+        # Simulate thinking time before showing response
+        time.sleep(2)
+        
+        # Clear the loading animation from reasoning column
+        reasoning_placeholder.empty()
+        
+        # Stream the final response word by word
+        with st.chat_message("assistant"):
             full_response = ""
+            message_placeholder = st.empty()
+            
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     word = chunk.choices[0].delta.content
                     full_response += word
-                    response_container.markdown(full_response)
+                    message_placeholder.markdown(full_response)
             
-        elif reasoning_condition == "Short":
-            # Get reasoning from model but show only a brief version with 2-3 sentences
-            reasoning_prompt = [
-                {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a brief reasoning that shows how you're approaching their question. Use 2-3 short sentences. Don't answer the question yet, just show your thinking approach."},
-                {"role": "user", "content": prompt}
-            ]
+            # Store the final response in session state
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
             
-            reasoning_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=reasoning_prompt,
-                stream=True,
-            )
-            
-            # Stream the short reasoning line by line
-            reasoning_placeholder.markdown('<div class="reasoning-cue" id="reasoning-text"></div>', unsafe_allow_html=True)
-            
-            reasoning_text = ""
-            lines = []
-            current_line = ""
-            
-            # Process the reasoning text word by word, line by line
-            for chunk in reasoning_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    reasoning_text += word
-                    current_line += word
-                    
-                    # Check if we've reached a sentence end
-                    if word in ['.', '!', '?'] and len(current_line.strip()) > 0:
-                        lines.append(current_line)
-                        current_line = ""
-                        
-                        # Display all lines collected so far
-                        displayed_text = "<br>".join(lines)
-                        if current_line:
-                            displayed_text += "<br>" + current_line
-                            
-                        reasoning_placeholder.markdown(
-                            f'<div class="reasoning-cue">{displayed_text}</div>', 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        # Regular update (not at sentence end)
-                        displayed_text = "<br>".join(lines)
-                        if current_line:
-                            displayed_text += "<br>" + current_line
-                            
-                        reasoning_placeholder.markdown(
-                            f'<div class="reasoning-cue">{displayed_text}</div>', 
-                            unsafe_allow_html=True
-                        )
-            
-            # Make sure we add the last line if it doesn't end with a period
-            if current_line:
-                lines.append(current_line)
-                displayed_text = "<br>".join(lines)
-                reasoning_placeholder.markdown(
-                    f'<div class="reasoning-cue">{displayed_text}</div>', 
-                    unsafe_allow_html=True
-                )
-            
-            # Get the final response
-            final_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": m["role"], "content": m["content"]} 
-                    for m in st.session_state.messages
-                ],
-                stream=True,
-            )
-            
-            # Wait a moment to let user read the reasoning
-            time.sleep(1)
-            
-            # Stream the final response word by word
-            full_response = ""
-            for chunk in final_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    full_response += word
-                    response_container.markdown(full_response)
-            
-        elif reasoning_condition == "Long":
-            # Get detailed reasoning from model
-            reasoning_prompt = [
-                {"role": "system", "content": "You are an assistant that shows your step-by-step reasoning process. For the user's query, provide a detailed paragraph (4-6 sentences) explaining how you're approaching their question. Show your thought process for understanding and analyzing the question. Don't answer their question yet, just explain your reasoning approach."},
-                {"role": "user", "content": prompt}
-            ]
-            
-            reasoning_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=reasoning_prompt,
-                stream=True,
-            )
-            
-            # Stream the long reasoning line by line
-            reasoning_placeholder.markdown('<div class="reasoning-cue" id="reasoning-text"></div>', unsafe_allow_html=True)
-            
-            reasoning_text = ""
-            lines = []
-            current_line = ""
-            
-            # Process the reasoning text word by word, line by line
-            for chunk in reasoning_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    reasoning_text += word
-                    current_line += word
-                    
-                    # Check if we've reached a sentence end
-                    if word in ['.', '!', '?'] and len(current_line.strip()) > 0:
-                        lines.append(current_line)
-                        current_line = ""
-                        
-                        # Display all lines collected so far
-                        displayed_text = "<br>".join(lines)
-                        if current_line:
-                            displayed_text += "<br>" + current_line
-                            
-                        reasoning_placeholder.markdown(
-                            f'<div class="reasoning-cue">{displayed_text}</div>', 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        # Regular update (not at sentence end)
-                        displayed_text = "<br>".join(lines)
-                        if current_line:
-                            displayed_text += "<br>" + current_line
-                            
-                        reasoning_placeholder.markdown(
-                            f'<div class="reasoning-cue">{displayed_text}</div>', 
-                            unsafe_allow_html=True
-                        )
-            
-            # Make sure we add the last line if it doesn't end with a period
-            if current_line:
-                lines.append(current_line)
-                displayed_text = "<br>".join(lines)
-                reasoning_placeholder.markdown(
-                    f'<div class="reasoning-cue">{displayed_text}</div>', 
-                    unsafe_allow_html=True
-                )
-            
-            # Get the final response
-            final_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": m["role"], "content": m["content"]} 
-                    for m in st.session_state.messages
-                ],
-                stream=True,
-            )
-            
-            # Wait a moment to let user read the reasoning
-            time.sleep(1)
-            
-            # Stream the final response word by word
-            full_response = ""
-            for chunk in final_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    full_response += word
-                    response_container.markdown(full_response)
+    elif reasoning_condition == "Short":
+        # Get reasoning from model with 2-3 sentences
+        reasoning_prompt = [
+            {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a brief reasoning that shows how you're approaching their question. Use 2-3 short sentences. Don't answer the question yet, just show your thinking approach."},
+            {"role": "user", "content": prompt}
+        ]
         
-        # Store the final response in session state
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        reasoning_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=reasoning_prompt,
+            stream=True,
+        )
+        
+        # Stream the short reasoning line by line in the reasoning column
+        reasoning_text = ""
+        lines = []
+        current_line = ""
+        
+        # Process the reasoning text line by line
+        for chunk in reasoning_response:
+            if chunk.choices[0].delta.content:
+                word = chunk.choices[0].delta.content
+                reasoning_text += word
+                current_line += word
+                
+                # Check if we've reached a sentence end
+                if word in ['.', '!', '?'] and len(current_line.strip()) > 0:
+                    lines.append(current_line)
+                    current_line = ""
+                    
+                    # Display all lines collected so far
+                    displayed_text = "<br>".join(lines)
+                    if current_line:
+                        displayed_text += "<br>" + current_line
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    # Regular update (not at sentence end)
+                    displayed_text = "<br>".join(lines)
+                    if current_line:
+                        displayed_text += "<br>" + current_line
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
+        
+        # Make sure we add the last line if it doesn't end with a period
+        if current_line:
+            lines.append(current_line)
+            displayed_text = "<br>".join(lines)
+            reasoning_placeholder.markdown(
+                f'<div class="reasoning-cue">{displayed_text}</div>', 
+                unsafe_allow_html=True
+            )
+        
+        # Store the reasoning text for later display
+        st.session_state.reasoning_text = displayed_text
+        
+        # Get the final response
+        final_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": m["role"], "content": m["content"]} 
+                for m in st.session_state.messages
+            ],
+            stream=True,
+        )
+        
+        # Wait a moment to let user read the reasoning
+        time.sleep(1)
+        
+        # Stream the final response word by word in the main column
+        with st.chat_message("assistant"):
+            full_response = ""
+            message_placeholder = st.empty()
+            
+            for chunk in final_response:
+                if chunk.choices[0].delta.content:
+                    word = chunk.choices[0].delta.content
+                    full_response += word
+                    message_placeholder.markdown(full_response)
+            
+            # Store the final response in session state
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            
+    elif reasoning_condition == "Long":
+        # Get detailed reasoning from model
+        reasoning_prompt = [
+            {"role": "system", "content": "You are an assistant that shows your step-by-step reasoning process. For the user's query, provide a detailed paragraph (4-6 sentences) explaining how you're approaching their question. Show your thought process for understanding and analyzing the question. Don't answer their question yet, just explain your reasoning approach."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        reasoning_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=reasoning_prompt,
+            stream=True,
+        )
+        
+        # Stream the long reasoning line by line in the reasoning column
+        reasoning_text = ""
+        lines = []
+        current_line = ""
+        
+        # Process the reasoning text line by line
+        for chunk in reasoning_response:
+            if chunk.choices[0].delta.content:
+                word = chunk.choices[0].delta.content
+                reasoning_text += word
+                current_line += word
+                
+                # Check if we've reached a sentence end
+                if word in ['.', '!', '?'] and len(current_line.strip()) > 0:
+                    lines.append(current_line)
+                    current_line = ""
+                    
+                    # Display all lines collected so far
+                    displayed_text = "<br>".join(lines)
+                    if current_line:
+                        displayed_text += "<br>" + current_line
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    # Regular update (not at sentence end)
+                    displayed_text = "<br>".join(lines)
+                    if current_line:
+                        displayed_text += "<br>" + current_line
+                        
+                    reasoning_placeholder.markdown(
+                        f'<div class="reasoning-cue">{displayed_text}</div>', 
+                        unsafe_allow_html=True
+                    )
+        
+        # Make sure we add the last line if it doesn't end with a period
+        if current_line:
+            lines.append(current_line)
+            displayed_text = "<br>".join(lines)
+            reasoning_placeholder.markdown(
+                f'<div class="reasoning-cue">{displayed_text}</div>', 
+                unsafe_allow_html=True
+            )
+        
+        # Store the reasoning text for later display
+        st.session_state.reasoning_text = displayed_text
+        
+        # Get the final response
+        final_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": m["role"], "content": m["content"]} 
+                for m in st.session_state.messages
+            ],
+            stream=True,
+        )
+        
+        # Wait a moment to let user read the reasoning
+        time.sleep(1)
+        
+        # Stream the final response word by word in the main column
+        with st.chat_message("assistant"):
+            full_response = ""
+            message_placeholder = st.empty()
+            
+            for chunk in final_response:
+                if chunk.choices[0].delta.content:
+                    word = chunk.choices[0].delta.content
+                    full_response += word
+                    message_placeholder.markdown(full_response)
+            
+            # Store the final response in session state
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
