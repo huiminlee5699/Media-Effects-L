@@ -117,63 +117,37 @@ openai_api_key = st.secrets["openai_api_key"]
 # Create an OpenAI client.
 client = OpenAI(api_key=openai_api_key)
 
-# Create session state variables
+# Initialize session state variables
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+if "current_response" not in st.session_state:
+    st.session_state.current_response = ""
     
 if "reasoning_text" not in st.session_state:
     st.session_state.reasoning_text = ""
+    
+if "processing" not in st.session_state:
+    st.session_state.processing = False
 
-# Create a two-column layout
-col1, col2 = st.columns([0.7, 0.3])
-
-# Main chat column
-with col1:
-    st.subheader("Chat")
+# Function to generate responses (both reasoning and main response)
+def generate_response(prompt):
+    st.session_state.processing = True
     
-    # Display the existing chat messages
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(message["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(message["content"])
-    
-    # Create a placeholder for streaming responses
-    response_placeholder = st.empty()
-    
-    # Add chat input at the bottom
-    prompt = st.chat_input("What would you like to know today?")
-
-# Reasoning column
-with col2:
-    st.subheader("AI Reasoning")
-    
-    # Create a placeholder for the reasoning content
-    reasoning_placeholder = st.empty()
-    
-    # Display current reasoning if available
-    if st.session_state.reasoning_text:
-        reasoning_placeholder.markdown(f'<div class="reasoning-cue">{st.session_state.reasoning_text}</div>', unsafe_allow_html=True)
-
-# Handle user input and generate responses
-if prompt:
-    # Store the current prompt
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Clear the previous reasoning
-    st.session_state.reasoning_text = ""
-    reasoning_placeholder.empty()
+    # Add user message to chat history
+    if {"role": "user", "content": prompt} not in st.session_state.messages:
+        st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Process based on condition
     if reasoning_condition == "None":
         # Just show loading dots in the reasoning column
-        reasoning_placeholder.markdown("""
-        <div class="loading-dots">
-            <span></span><span></span><span></span>
-        </div>
-        """, unsafe_allow_html=True)
+        with col2:
+            with reasoning_placeholder.container():
+                st.markdown("""
+                <div class="loading-dots">
+                    <span></span><span></span><span></span>
+                </div>
+                """, unsafe_allow_html=True)
         
         # Get the final response without showing reasoning
         response = client.chat.completions.create(
@@ -185,26 +159,28 @@ if prompt:
             stream=True,
         )
         
-        # Simulate thinking time before showing response
+        # Simulate thinking time
         time.sleep(2)
         
         # Clear the loading animation from reasoning column
-        reasoning_placeholder.empty()
+        with col2:
+            reasoning_placeholder.empty()
         
-        # Stream the final response word by word
-        with st.chat_message("assistant"):
-            full_response = ""
-            message_placeholder = st.empty()
-            
-            for chunk in response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    full_response += word
-                    message_placeholder.markdown(full_response)
-            
-            # Store the final response in session state
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
+        # Stream the final response word by word in the chat column
+        full_response = ""
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                word = chunk.choices[0].delta.content
+                full_response += word
+                # Update response in session state to trigger rerun
+                st.session_state.current_response = full_response
+                # Force a rerun to update the UI
+                st.experimental_rerun()
+        
+        # Store the final response in session state
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.current_response = ""
+        
     elif reasoning_condition == "Short":
         # Get reasoning from model with 2-3 sentences
         reasoning_prompt = [
@@ -239,32 +215,35 @@ if prompt:
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    with col2:
+                        reasoning_placeholder.markdown(
+                            f'<div class="reasoning-cue">{displayed_text}</div>', 
+                            unsafe_allow_html=True
+                        )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    with col2:
+                        reasoning_placeholder.markdown(
+                            f'<div class="reasoning-cue">{displayed_text}</div>', 
+                            unsafe_allow_html=True
+                        )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            reasoning_placeholder.markdown(
-                f'<div class="reasoning-cue">{displayed_text}</div>', 
-                unsafe_allow_html=True
-            )
+            with col2:
+                reasoning_placeholder.markdown(
+                    f'<div class="reasoning-cue">{displayed_text}</div>', 
+                    unsafe_allow_html=True
+                )
         
-        # Store the reasoning text for later display
+        # Store the reasoning text
         st.session_state.reasoning_text = displayed_text
         
         # Get the final response
@@ -280,19 +259,20 @@ if prompt:
         # Wait a moment to let user read the reasoning
         time.sleep(1)
         
-        # Stream the final response word by word in the main column
-        with st.chat_message("assistant"):
-            full_response = ""
-            message_placeholder = st.empty()
-            
-            for chunk in final_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    full_response += word
-                    message_placeholder.markdown(full_response)
-            
-            # Store the final response in session state
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Stream the final response word by word
+        full_response = ""
+        for chunk in final_response:
+            if chunk.choices[0].delta.content:
+                word = chunk.choices[0].delta.content
+                full_response += word
+                # Update response in session state
+                st.session_state.current_response = full_response
+                # Force a rerun to update the UI
+                st.experimental_rerun()
+        
+        # Store the final response in session state
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.current_response = ""
             
     elif reasoning_condition == "Long":
         # Get detailed reasoning from model
@@ -328,32 +308,35 @@ if prompt:
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    with col2:
+                        reasoning_placeholder.markdown(
+                            f'<div class="reasoning-cue">{displayed_text}</div>', 
+                            unsafe_allow_html=True
+                        )
                 else:
                     # Regular update (not at sentence end)
                     displayed_text = "<br>".join(lines)
                     if current_line:
                         displayed_text += "<br>" + current_line
-                        
-                    reasoning_placeholder.markdown(
-                        f'<div class="reasoning-cue">{displayed_text}</div>', 
-                        unsafe_allow_html=True
-                    )
+                    
+                    with col2:
+                        reasoning_placeholder.markdown(
+                            f'<div class="reasoning-cue">{displayed_text}</div>', 
+                            unsafe_allow_html=True
+                        )
         
         # Make sure we add the last line if it doesn't end with a period
         if current_line:
             lines.append(current_line)
             displayed_text = "<br>".join(lines)
-            reasoning_placeholder.markdown(
-                f'<div class="reasoning-cue">{displayed_text}</div>', 
-                unsafe_allow_html=True
-            )
+            with col2:
+                reasoning_placeholder.markdown(
+                    f'<div class="reasoning-cue">{displayed_text}</div>', 
+                    unsafe_allow_html=True
+                )
         
-        # Store the reasoning text for later display
+        # Store the reasoning text
         st.session_state.reasoning_text = displayed_text
         
         # Get the final response
@@ -369,16 +352,59 @@ if prompt:
         # Wait a moment to let user read the reasoning
         time.sleep(1)
         
-        # Stream the final response word by word in the main column
+        # Stream the final response word by word
+        full_response = ""
+        for chunk in final_response:
+            if chunk.choices[0].delta.content:
+                word = chunk.choices[0].delta.content
+                full_response += word
+                # Update response in session state
+                st.session_state.current_response = full_response
+                # Force a rerun to update the UI
+                st.experimental_rerun()
+        
+        # Store the final response in session state
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.current_response = ""
+    
+    st.session_state.processing = False
+
+# Create a two-column layout
+col1, col2 = st.columns([0.7, 0.3])
+
+# Main chat column
+with col1:
+    st.subheader("Chat")
+    
+    # Display the existing chat messages
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(message["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(message["content"])
+    
+    # Show current response being generated (if any)
+    if st.session_state.current_response:
         with st.chat_message("assistant"):
-            full_response = ""
-            message_placeholder = st.empty()
-            
-            for chunk in final_response:
-                if chunk.choices[0].delta.content:
-                    word = chunk.choices[0].delta.content
-                    full_response += word
-                    message_placeholder.markdown(full_response)
-            
-            # Store the final response in session state
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            st.markdown(st.session_state.current_response)
+    
+    # Add chat input
+    prompt = st.chat_input("What would you like to know today?", disabled=st.session_state.processing)
+
+# Reasoning column
+with col2:
+    # No header as per request
+    
+    # Create a placeholder for the reasoning content
+    reasoning_placeholder = st.empty()
+    
+    # Display current reasoning if available
+    if st.session_state.reasoning_text and not st.session_state.processing:
+        reasoning_placeholder.markdown(f'<div class="reasoning-cue">{st.session_state.reasoning_text}</div>', unsafe_allow_html=True)
+
+# Process the user's input
+if prompt and not st.session_state.processing:
+    # Trigger response generation
+    generate_response(prompt)
