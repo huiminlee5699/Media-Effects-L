@@ -3,11 +3,9 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 import time
 import random
-import re
 
 st.set_page_config(
-    page_title="💬 CHATBOT AI",
-    layout="wide"  # Use wide layout for better space allocation
+    page_title="💬 MEDIA EFFECTS TEST",
 )
 
 st.markdown("""
@@ -71,91 +69,13 @@ st.markdown("""
             transform: translateY(-10px);
         }
     }
-    
-    /* Chat layout styling for two-column display */
-    .chat-columns {
-        display: flex;
-        width: 100%;
-    }
-    .column-left {
-        width: 35%;
-        padding-right: 15px;
-    }
-    .column-right {
-        width: 65%;
-        padding-left: 15px;
-        border-left: 1px solid #eee;
-    }
-    
-    /* Simple collapsible styling */
-    .collapsible {
-        background-color: #f7f7f7;
-        cursor: pointer;
-        padding: 12px;
-        width: 100%;
-        border: none;
-        text-align: left;
-        outline: none;
-        font-size: 14px;
-        border-left: 3px solid #3f39e3;
-        transition: 0.4s;
-        border-radius: 4px 4px 0 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0;
-    }
-
-    .active-collapsible, .collapsible:hover {
-        background-color: #f0f0f0;
-    }
-
-    .collapsible:after {
-        content: '\\002B';
-        font-weight: bold;
-        float: right;
-        margin-left: 5px;
-    }
-
-    .active-collapsible:after {
-        content: '\\2212';
-    }
-
-    .collapsible-content {
-        padding: 0 12px;
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.2s ease-out;
-        background-color: #f7f7f7;
-        border-left: 3px solid #3f39e3;
-        border-radius: 0 0 4px 4px;
-        font-style: italic;
-        color: #555;
-    }
 </style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    var coll = document.getElementsByClassName("collapsible");
-    for (var i = 0; i < coll.length; i++) {
-        coll[i].addEventListener("click", function() {
-            this.classList.toggle("active-collapsible");
-            var content = this.nextElementSibling;
-            if (content.style.maxHeight) {
-                content.style.maxHeight = null;
-            } else {
-                content.style.maxHeight = content.scrollHeight + "px";
-            }
-        });
-    }
-});
-</script>
 """, unsafe_allow_html=True)
 
 # Show title and description.
-st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;'>💬 CHATBOT AI</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='font-family: \"Inria Sans\", sans-serif; color: #3f39e3;'>💬 MEDIA EFFECTS TEST</h1>", unsafe_allow_html=True)
 st.write(
-    "Welcome to Chatbot, a new OpenAI-powered chatbot! "
+    "Welcome to Media Effects Test, a new OpenAI-powered chatbot! "
     "Feel free to ask me anything!"
 )
 
@@ -176,51 +96,11 @@ client = OpenAI(api_key=openai_api_key)
 # Create session state variables
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "reasoning_history" not in st.session_state:
-    st.session_state.reasoning_history = []
-
-# Function to split text into sentences
-def split_into_sentences(text):
-    # Split text into sentences
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    return [s for s in sentences if s.strip()]
-
-# Function to create collapsible element (simpler than a dropdown)
-def create_collapsible(header_text, content_text):
-    # Truncate header text if it's too long
-    header_display = header_text[:50] + "..." if len(header_text) > 50 else header_text
-    
-    html = f"""
-    <button class="collapsible">{header_display}</button>
-    <div class="collapsible-content">
-        <p>{content_text}</p>
-    </div>
-    """
-    return html
 
 # Display the existing chat messages
-for i, message in enumerate(st.session_state.messages):
+for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if message["role"] == "assistant" and i < len(st.session_state.reasoning_history) and st.session_state.reasoning_history[i]:
-            # Create two columns for layout
-            col1, col2 = st.columns([35, 65])
-            
-            with col1:
-                # Create collapsible for reasoning
-                reasoning = st.session_state.reasoning_history[i]
-                if reasoning:  # Only display if there's reasoning
-                    # Get the first sentence for the header
-                    sentences = split_into_sentences(reasoning)
-                    header = sentences[0] if sentences else "Reasoning"
-                    collapsible_html = create_collapsible(header, reasoning)
-                    st.markdown(collapsible_html, unsafe_allow_html=True)
-            
-            with col2:
-                # Display the response
-                st.markdown(message["content"])
-        else:
-            # Regular message display
-            st.markdown(message["content"])
+        st.markdown(message["content"])
 
 # Create a chat input field
 if prompt := st.chat_input("What would you like to know today?"):
@@ -229,21 +109,13 @@ if prompt := st.chat_input("What would you like to know today?"):
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Create a two-column layout for the assistant's response
+    # Display reasoning based on condition
     with st.chat_message("assistant"):
-        # Create explicit columns using Streamlit's column feature
-        col1, col2 = st.columns([35, 65])
-        
-        with col1:
-            reasoning_placeholder = st.empty()
-            
-        with col2:
-            response_container = st.empty()
-        
-        final_reasoning = ""  # Store the final reasoning for history
+        reasoning_placeholder = st.empty()
+        response_container = st.empty()
         
         if reasoning_condition == "None":
-            # Just show loading dots in the reasoning area
+            # Just show loading dots
             reasoning_placeholder.markdown("""
             <div class="loading-dots">
                 <span></span><span></span><span></span>
@@ -263,18 +135,15 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Simulate thinking time before showing response
             time.sleep(2)
             
-            # Clear the reasoning area and display the final response
-            reasoning_placeholder.empty()  # We still clear the loading dots
+            # Display the final response
             full_response = response.choices[0].message.content
+            reasoning_placeholder.empty()  # Clear the loading animation
             response_container.markdown(full_response)
             
-            # No reasoning to store
-            final_reasoning = ""
-            
         elif reasoning_condition == "Short":
-            # Get reasoning from model with 2-3 brief sentences
+            # Get reasoning from model but show only a brief version with 2-3 sentences
             reasoning_prompt = [
-                {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide 2-3 very brief sentences showing how you're approaching their question. Each sentence should be concise (under 15 words). Don't answer the question yet, just show your thinking approach."},
+                {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a brief reasoning that shows how you're approaching their question. Use 2-3 short sentences. Don't answer the question yet, just show your thinking approach."},
                 {"role": "user", "content": prompt}
             ]
             
@@ -284,17 +153,9 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=False,
             )
             
-            # Split the reasoning into sentences and display them one by one
+            # Display the short reasoning
             reasoning_text = reasoning_response.choices[0].message.content
-            sentences = split_into_sentences(reasoning_text)
-            
-            # Show each sentence one at a time, replacing the previous one
-            for sentence in sentences:
-                reasoning_placeholder.markdown(f'<div class="reasoning-cue">{sentence}</div>', unsafe_allow_html=True)
-                time.sleep(1.5)  # Wait a moment between sentences
-            
-            # Store the full reasoning for history
-            final_reasoning = reasoning_text
+            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{reasoning_text}</div>', unsafe_allow_html=True)
             
             # Get the final response
             final_response = client.chat.completions.create(
@@ -306,13 +167,10 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=True,
             )
             
-            # Before streaming response, replace the reasoning area with collapsible
-            sentences = split_into_sentences(reasoning_text)
-            header = sentences[0] if sentences else "Reasoning"
-            collapsible_html = create_collapsible(header, reasoning_text)
-            reasoning_placeholder.markdown(collapsible_html, unsafe_allow_html=True)
+            # Wait a moment to let user read the reasoning
+            time.sleep(2)
             
-            # Stream the final response (keep reasoning visible)
+            # Stream the final response
             full_response = ""
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
@@ -336,9 +194,6 @@ if prompt := st.chat_input("What would you like to know today?"):
             reasoning_text = reasoning_response.choices[0].message.content
             reasoning_placeholder.markdown(f'<div class="reasoning-cue">{reasoning_text}</div>', unsafe_allow_html=True)
             
-            # Store the full reasoning for history
-            final_reasoning = reasoning_text
-            
             # Get the final response
             final_response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -352,20 +207,12 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Wait a moment to let user read the reasoning
             time.sleep(3)
             
-            # Before streaming response, replace the reasoning area with collapsible
-            sentences = split_into_sentences(reasoning_text)
-            header = sentences[0] if sentences else "Reasoning"
-            collapsible_html = create_collapsible(header, reasoning_text)
-            reasoning_placeholder.markdown(collapsible_html, unsafe_allow_html=True)
-            
-            # Stream the final response (keep reasoning visible)
+            # Stream the final response
             full_response = ""
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
         
-        # Store the response in session state
+        # Store the final response in session state
         st.session_state.messages.append({"role": "assistant", "content": full_response})
-        # Store the reasoning separately for history display
-        st.session_state.reasoning_history.append(final_reasoning)
