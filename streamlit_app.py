@@ -4,6 +4,7 @@ from openai import OpenAI
 import time
 import random
 import re
+import html
 
 st.set_page_config(
     page_title="💬 CHATBOT AI",
@@ -71,6 +72,21 @@ st.markdown("""
             transform: translateY(-10px);
         }
     }
+    
+    /* Custom chat layout */
+    .chat-columns {
+        display: flex;
+        width: 100%;
+    }
+    .column-left {
+        width: 35%;
+        padding-right: 15px;
+    }
+    .column-right {
+        width: 65%;
+        padding-left: 15px;
+        border-left: 1px solid #eee;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,18 +114,41 @@ client = OpenAI(api_key=openai_api_key)
 # Create session state variables
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "reasoning_history" not in st.session_state:
+    st.session_state.reasoning_history = []
 
 # Function to split text into sentences
 def split_into_sentences(text):
-    # This is a simple sentence splitter, you might need a more sophisticated one
-    # depending on your specific needs
+    # Simple sentence splitter
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return [s for s in sentences if s.strip()]
 
 # Display the existing chat messages
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["role"] == "assistant" and i < len(st.session_state.reasoning_history) and st.session_state.reasoning_history[i]:
+            # Get the reasoning and response
+            reasoning = st.session_state.reasoning_history[i]
+            response = message["content"]
+            
+            # Create two-column layout
+            st.markdown('<div class="chat-columns">', unsafe_allow_html=True)
+            
+            # Left column - reasoning
+            st.markdown('<div class="column-left">', unsafe_allow_html=True)
+            st.markdown(f'<div class="reasoning-cue">{reasoning}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Right column - response
+            st.markdown('<div class="column-right">', unsafe_allow_html=True)
+            st.markdown(response, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Close layout
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            # Regular message display
+            st.markdown(message["content"], unsafe_allow_html=True)
 
 # Create a chat input field
 if prompt := st.chat_input("What would you like to know today?"):
@@ -120,7 +159,7 @@ if prompt := st.chat_input("What would you like to know today?"):
     
     # Create a two-column layout for the assistant's response
     with st.chat_message("assistant"):
-        # Create explicit columns using Streamlit's column feature
+        # Create explicit columns using Streamlit's column feature for the active response
         col1, col2 = st.columns([35, 65])
         
         with col1:
@@ -128,6 +167,8 @@ if prompt := st.chat_input("What would you like to know today?"):
             
         with col2:
             response_container = st.empty()
+        
+        final_reasoning = ""  # Store the final reasoning for history
         
         if reasoning_condition == "None":
             # Just show loading dots in the reasoning area
@@ -155,6 +196,9 @@ if prompt := st.chat_input("What would you like to know today?"):
             full_response = response.choices[0].message.content
             response_container.markdown(full_response)
             
+            # No reasoning to store
+            final_reasoning = ""
+            
         elif reasoning_condition == "Short":
             # Get reasoning from model with 2-3 brief sentences
             reasoning_prompt = [
@@ -178,7 +222,8 @@ if prompt := st.chat_input("What would you like to know today?"):
                 time.sleep(1.5)  # Wait a moment between sentences
             
             # Set the final reasoning display to the last sentence
-            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{sentences[-1]}</div>', unsafe_allow_html=True)
+            final_reasoning = sentences[-1]
+            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{final_reasoning}</div>', unsafe_allow_html=True)
             
             # Get the final response
             final_response = client.chat.completions.create(
@@ -212,7 +257,8 @@ if prompt := st.chat_input("What would you like to know today?"):
             
             # Display the long reasoning
             reasoning_text = reasoning_response.choices[0].message.content
-            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{reasoning_text}</div>', unsafe_allow_html=True)
+            final_reasoning = reasoning_text
+            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{final_reasoning}</div>', unsafe_allow_html=True)
             
             # Get the final response
             final_response = client.chat.completions.create(
@@ -234,19 +280,7 @@ if prompt := st.chat_input("What would you like to know today?"):
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
         
-        # Store only the final response in session state
-        final_message = full_response
-        if reasoning_condition != "None":
-            # Include both reasoning and response in the chat history
-            # This makes it look like a single message in history, but it was displayed in columns
-            reasoning_display = reasoning_text if reasoning_condition == "Long" else sentences[-1]
-            final_message = f"""<div style="display: flex; width: 100%;">
-            <div style="width: 35%; padding-right: 15px;">
-                <div class="reasoning-cue">{reasoning_display}</div>
-            </div>
-            <div style="width: 65%; padding-left: 15px;">
-                {full_response}
-            </div>
-            </div>"""
-            
-        st.session_state.messages.append({"role": "assistant", "content": final_message})
+        # Store the response in session state
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # Store the reasoning separately for history display
+        st.session_state.reasoning_history.append(final_reasoning)
