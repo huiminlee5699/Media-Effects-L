@@ -3,9 +3,11 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 import time
 import random
+import re
 
 st.set_page_config(
     page_title="💬 CHATBOT AI",
+    layout="wide"  # Use wide layout for better space allocation
 )
 
 st.markdown("""
@@ -69,6 +71,36 @@ st.markdown("""
             transform: translateY(-10px);
         }
     }
+    
+    /* Two-column layout for response area */
+    .chat-layout {
+        display: flex;
+        width: 100%;
+    }
+    .reasoning-area {
+        width: 35%;
+        padding-right: 15px;
+        border-right: 1px solid #eee;
+    }
+    .response-area {
+        width: 65%;
+        padding-left: 15px;
+    }
+    
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+        .chat-layout {
+            flex-direction: column;
+        }
+        .reasoning-area, .response-area {
+            width: 100%;
+            padding: 0;
+            border-right: none;
+        }
+        .reasoning-area {
+            margin-bottom: 15px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,8 +129,15 @@ client = OpenAI(api_key=openai_api_key)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Function to split text into sentences
+def split_into_sentences(text):
+    # This is a simple sentence splitter, you might need a more sophisticated one
+    # depending on your specific needs
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return [s for s in sentences if s.strip()]
+
 # Display the existing chat messages
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
@@ -109,13 +148,25 @@ if prompt := st.chat_input("What would you like to know today?"):
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Display reasoning based on condition
+    # Create a two-column layout for the assistant's response
     with st.chat_message("assistant"):
+        # Use custom CSS for layout
+        st.markdown('<div class="chat-layout">', unsafe_allow_html=True)
+        
+        # Left column for reasoning
+        st.markdown('<div class="reasoning-area" id="reasoning-area">', unsafe_allow_html=True)
         reasoning_placeholder = st.empty()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Right column for response
+        st.markdown('<div class="response-area" id="response-area">', unsafe_allow_html=True)
         response_container = st.empty()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
         
         if reasoning_condition == "None":
-            # Just show loading dots
+            # Just show loading dots in the reasoning area
             reasoning_placeholder.markdown("""
             <div class="loading-dots">
                 <span></span><span></span><span></span>
@@ -135,15 +186,15 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Simulate thinking time before showing response
             time.sleep(2)
             
-            # Display the final response
+            # Clear the reasoning area and display the final response
+            reasoning_placeholder.empty()
             full_response = response.choices[0].message.content
-            reasoning_placeholder.empty()  # Clear the loading animation
             response_container.markdown(full_response)
             
         elif reasoning_condition == "Short":
-            # Get reasoning from model but show only a brief version
+            # Get reasoning from model with 2-3 brief sentences
             reasoning_prompt = [
-                {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide a very brief one-sentence reasoning step that shows how you're approaching their question. Keep it under 15 words. Don't answer the question yet, just show your thinking approach."},
+                {"role": "system", "content": "You are an assistant that shows your reasoning process. For the user's query, provide 2-3 very brief sentences showing how you're approaching their question. Each sentence should be concise (under 15 words). Don't answer the question yet, just show your thinking approach."},
                 {"role": "user", "content": prompt}
             ]
             
@@ -153,9 +204,14 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=False,
             )
             
-            # Display the short reasoning
+            # Split the reasoning into sentences and display them one by one
             reasoning_text = reasoning_response.choices[0].message.content
-            reasoning_placeholder.markdown(f'<div class="reasoning-cue">{reasoning_text}</div>', unsafe_allow_html=True)
+            sentences = split_into_sentences(reasoning_text)
+            
+            # Show each sentence one at a time, replacing the previous one
+            for sentence in sentences:
+                reasoning_placeholder.markdown(f'<div class="reasoning-cue">{sentence}</div>', unsafe_allow_html=True)
+                time.sleep(1.5)  # Wait a moment between sentences
             
             # Get the final response
             final_response = client.chat.completions.create(
@@ -167,13 +223,16 @@ if prompt := st.chat_input("What would you like to know today?"):
                 stream=True,
             )
             
-            # Wait a moment to let user read the reasoning
-            time.sleep(2)
-            
-            # Stream the final response
+            # Stream the final response and clear reasoning when response starts
             full_response = ""
+            first_chunk = True
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
+                    if first_chunk:
+                        # Clear reasoning area when first response chunk arrives
+                        reasoning_placeholder.empty()
+                        first_chunk = False
+                    
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
             
@@ -207,12 +266,18 @@ if prompt := st.chat_input("What would you like to know today?"):
             # Wait a moment to let user read the reasoning
             time.sleep(3)
             
-            # Stream the final response
+            # Stream the final response and clear reasoning when response starts
             full_response = ""
+            first_chunk = True
             for chunk in final_response:
                 if chunk.choices[0].delta.content:
+                    if first_chunk:
+                        # Clear reasoning area when first response chunk arrives
+                        reasoning_placeholder.empty()
+                        first_chunk = False
+                    
                     full_response += chunk.choices[0].delta.content
                     response_container.markdown(full_response)
         
-        # Store the final response in session state
+        # Store only the final response in session state
         st.session_state.messages.append({"role": "assistant", "content": full_response})
