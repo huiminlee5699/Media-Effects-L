@@ -72,43 +72,49 @@ st.markdown("""
         }
     }
     
-    /* Message popup styling */
-    .message-popup {
+    /* Message panel styling */
+    .message-panel {
         position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 300px;
+        top: 0;
+        right: 0;
+        width: 30%;
+        height: 100%;
         background-color: white;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        padding: 15px;
+        border-left: 1px solid #ddd;
+        box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+        padding: 20px;
         z-index: 1000;
+        overflow-y: auto;
     }
     
     .message-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
     }
     
     .message-content {
-        font-size: 14px;
-        margin-bottom: 10px;
+        font-size: 16px;
+        margin-bottom: 15px;
+        line-height: 1.5;
     }
     
     .message-sender {
         font-weight: bold;
         color: #3f39e3;
+        font-size: 18px;
     }
     
     .message-input {
         width: 100%;
-        padding: 8px;
+        padding: 12px;
         border: 1px solid #ddd;
         border-radius: 4px;
-        margin-top: 5px;
+        margin-top: 15px;
+        font-size: 16px;
     }
     
     .ai-response {
@@ -165,21 +171,21 @@ def stream_reasoning(container, reasoning_text, delay=0.03):
             container.markdown(f'<div class="reasoning-section">{full_response}</div>', unsafe_allow_html=True)
             time.sleep(delay * 2)  # Slightly longer delay between lines
 
-def display_message_popup(sender, messages, delay_before=3, delay_between=1):
-    """Display a message popup in the bottom right corner"""
+def display_message_panel(sender, messages, delay_before=2, delay_between=3, duration=15):
+    """Display a message panel on the right side of the screen that stays visible longer"""
     time.sleep(delay_before)
     
     message_placeholder = st.empty()
     
     # Display first message
     message_placeholder.markdown(f"""
-    <div class="message-popup">
+    <div class="message-panel">
         <div class="message-header">
-            <span class="message-sender">{sender}</span>
-            <span>✕</span>
+            <span class="message-sender">Chat with {sender}</span>
+            <span style="cursor: pointer;">✕</span>
         </div>
         <div class="message-content">
-            {messages[0]}
+            <p><strong>{sender}:</strong> {messages[0]}</p>
         </div>
         <input type="text" class="message-input" placeholder="Type a reply...">
     </div>
@@ -191,20 +197,23 @@ def display_message_popup(sender, messages, delay_before=3, delay_between=1):
         
         # Display second message
         message_placeholder.markdown(f"""
-        <div class="message-popup">
+        <div class="message-panel">
             <div class="message-header">
-                <span class="message-sender">{sender}</span>
-                <span>✕</span>
+                <span class="message-sender">Chat with {sender}</span>
+                <span style="cursor: pointer;">✕</span>
             </div>
             <div class="message-content">
-                {messages[0]}
+                <p><strong>{sender}:</strong> {messages[0]}</p>
             </div>
-            <div class="message-content" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                {messages[1]}
+            <div class="message-content">
+                <p><strong>{sender}:</strong> {messages[1]}</p>
             </div>
             <input type="text" class="message-input" placeholder="Type a reply...">
         </div>
         """, unsafe_allow_html=True)
+    
+    # Keep the message visible for the specified duration
+    time.sleep(duration)
     
     return message_placeholder
 
@@ -403,80 +412,74 @@ else:  # No Reasoning
     else:
         condition_key = "no_reasoning_inaccurate_output"
 
-# Main layout
-col1, col2 = st.columns([2, 1])
+# Main layout - using only a single column
+main_container = st.container()
 
-with col1:
-    # Container for the main interaction
-    main_container = st.container()
-    
-    # Show the problem if not already shown
-    if not st.session_state.problem_shown:
-        with main_container:
-            st.markdown("<h3>Math Problem Solver</h3>", unsafe_allow_html=True)
-            st.markdown("<p>Please ask the AI assistant to solve the following math problem:</p>", unsafe_allow_html=True)
-            st.markdown(f'<div class="problem-statement">{PROBLEM}</div>', unsafe_allow_html=True)
-            
-            # Simulate user input (automatically sent)
-            if st.button("Ask AI to solve this problem"):
-                st.session_state.problem_shown = True
-                st.experimental_rerun()
+# Show the problem if not already shown
+if not st.session_state.problem_shown:
+    with main_container:
+        st.markdown("<h3>Math Problem Solver</h3>", unsafe_allow_html=True)
+        st.markdown("<p>Please ask the AI assistant to solve the following math problem:</p>", unsafe_allow_html=True)
+        st.markdown(f'<div class="problem-statement">{PROBLEM}</div>', unsafe_allow_html=True)
+        
+        # Simulate user input (automatically sent)
+        if st.button("Ask AI to solve this problem"):
+            st.session_state.problem_shown = True
+            st.rerun() # Using st.rerun() instead of experimental_rerun()
 
-    # Process the problem and show reasoning/output
-    if st.session_state.problem_shown and not st.session_state.experiment_complete:
-        with main_container:
-            # Show the user's "message"
-            st.markdown("<div style='background-color: #e6f7ff; padding: 10px; border-radius: 8px; margin-bottom: 15px;'>", unsafe_allow_html=True)
-            st.markdown(f"<p><strong>You:</strong> {PROBLEM}</p>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+# Process the problem and show reasoning/output
+if st.session_state.problem_shown and not st.session_state.experiment_complete:
+    with main_container:
+        # Show the user's "message"
+        st.markdown("<div style='background-color: #e6f7ff; padding: 10px; border-radius: 8px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+        st.markdown(f"<p><strong>You:</strong> {PROBLEM}</p>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Display AI assistant's response
+        st.markdown("<div class='ai-response'>", unsafe_allow_html=True)
+        st.markdown("<p><strong>AI Assistant:</strong></p>", unsafe_allow_html=True)
+        
+        # Store reasoning container for later reference
+        reasoning_section = st.empty()
+        
+        # Show loading animation
+        if not st.session_state.reasoning_shown:
+            loading = display_loading_animation()
             
-            # Display AI assistant's response
-            st.markdown("<div class='ai-response'>", unsafe_allow_html=True)
-            st.markdown("<p><strong>AI Assistant:</strong></p>", unsafe_allow_html=True)
+            # Simulate AI thinking time
+            time.sleep(1)
+            loading.empty()
             
-            # Show loading animation
-            if not st.session_state.reasoning_shown:
-                loading = display_loading_animation()
-                
-                # Simulate AI thinking time
-                time.sleep(1)
-                loading.empty()
-                
-                # Show distraction if in low processing ability condition
-                message_popup = None
-                if processing_condition == "Low Processing Ability (With Distraction)":
-                    message_popup = display_message_popup("Stephanie", FRIEND_MESSAGES)
-                
-                # Display reasoning based on condition
-                if reasoning_condition != "No Reasoning":
-                    reasoning_container = st.empty()
-                    stream_reasoning(reasoning_container, CONDITIONS[condition_key]["reasoning"])
-                
-                # Clean up message popup after reasoning is shown
-                if message_popup:
-                    message_popup.empty()
-                
-                # Mark reasoning as shown
-                st.session_state.reasoning_shown = True
-                
-                # Simulate another brief pause before showing output
-                time.sleep(1)
-                
-                # Display final answer
-                output_container = st.empty()
-                stream_text(output_container, CONDITIONS[condition_key]["output"])
-                
-                # Mark output as shown and experiment complete
-                st.session_state.output_shown = True
-                st.session_state.experiment_complete = True
+            # Show distraction if in low processing ability condition
+            message_panel = None
+            if processing_condition == "Low Processing Ability (With Distraction)":
+                message_panel = display_message_panel("Stephanie", FRIEND_MESSAGES)
             
-            st.markdown("</div>", unsafe_allow_html=True)
-
-with col2:
-    # Only show reasoning sidebar if applicable
-    if reasoning_condition != "No Reasoning" and st.session_state.reasoning_shown:
-        st.markdown("<h4>AI's Reasoning Process</h4>", unsafe_allow_html=True)
-        st.markdown(f'<div class="reasoning-section">{CONDITIONS[condition_key]["reasoning"]}</div>', unsafe_allow_html=True)
+            # Display reasoning based on condition
+            if reasoning_condition != "No Reasoning":
+                stream_reasoning(reasoning_section, CONDITIONS[condition_key]["reasoning"])
+                # Store reasoning in session state to keep it visible
+                st.session_state.shown_reasoning = CONDITIONS[condition_key]["reasoning"]
+            
+            # Mark reasoning as shown
+            st.session_state.reasoning_shown = True
+            
+            # Simulate another brief pause before showing output
+            time.sleep(1)
+            
+            # Display final answer
+            output_container = st.empty()
+            stream_text(output_container, CONDITIONS[condition_key]["output"])
+            
+            # Mark output as shown and experiment complete
+            st.session_state.output_shown = True
+            st.session_state.experiment_complete = True
+        
+        # Always display reasoning if it was shown before (ensures it stays visible)
+        if reasoning_condition != "No Reasoning" and hasattr(st.session_state, 'shown_reasoning'):
+            reasoning_section.markdown(f'<div class="reasoning-section">{st.session_state.shown_reasoning}</div>', unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Add a continuation button at the bottom when experiment is complete
 if st.session_state.experiment_complete:
